@@ -68,72 +68,60 @@ def optimize_portfolio(
     :rtype: tuple  		  	   		 	 	 			  		 			 	 	 		 		 	
     """  		  	   		 	 	 			  		 			 	 	 		 		 	
   		  	   		 	 	 			  		 			 	 	 		 		 	
-    # Read in adjusted closing prices for given symbols, date range  		  	   		 	 	 			  		 			 	 	 		 		 	
-    dates = pd.date_range(sd, ed)  		  	   		 	 	 			  		 			 	 	 		 		 	
-    prices_all = get_data(syms, dates)  # automatically adds SPY  		  	   		 	 	 			  		 			 	 	 		 		 	
-    prices = prices_all[syms]  # only portfolio symbols  		  	   		 	 	 			  		 			 	 	 		 		 	
-    prices_SPY = prices_all["SPY"]  # only SPY, for comparison later  		  	   		 	 	 			  		 			 	 	 		 		 	
-  		  	   		 	 	 			  		 			 	 	 		 		 	
-    # find the allocations for the optimal portfolio  		  	   		 	 	 			  		 			 	 	 		 		 	
-    # note that the values here ARE NOT meant to be correct for a test case  		  	   		 	 	 			  		 			 	 	 		 		 	
-    allocs = np.asarray(  		  	   		 	 	 			  		 			 	 	 		 		 	
-        [0.2, 0.2, 0.3, 0.3]  		  	   		 	 	 			  		 			 	 	 		 		 	
-    )  
+    # getting the dates data
+    dates = pd.date_range(sd, ed)  	
 
-    # getting the proper allocations
-    normalized_prices = prices / prices.iloc[0]
-    allocated_prices = normalized_prices * allocs
-    allocs = allocated_prices
+    # gets all the prices for the given tickers AND SPY 	  	   		 	 	 			  		 			 	 	 		 		 	
+    prices_all = get_data(syms, dates) 	
 
-    cr, adr, sddr, sr = [  		  	   		 	 	 			  		 			 	 	 		 		 	
-        0.25,  		  	   		 	 	 			  		 			 	 	 		 		 	
-        0.001,  		  	   		 	 	 			  		 			 	 	 		 		 	
-        0.0005,  		  	   		 	 	 			  		 			 	 	 		 		 	
-        2.1,  		  	   		 	 	 			  		 			 	 	 		 		 	
-    ]  # add code here to compute stats  
-
-    # getting the proper allocs
-    portfolio_value = allocated_prices.sum(axis=1)
-    cumulative_return = (portfolio_value[-1] / portfolio_value[0]) - 1
-    daily_returns = portfolio_value.pct_change().dropna()
-    average_daily_return = daily_returns.mean()
-    standard_deviation_of_daily_returns = daily_returns.std()
-    sharpe_ratio = (adr / sddr) * np.sqrt(252)
-    cr, adr, sddr, sr = cumulative_return, average_daily_return, standard_deviation_of_daily_returns, sharpe_ratio
-		  	   		 	 	 			  		 			 	 	 		 		 		   		 	 	 			  		 			 	 	 		 		 	
-    # Get daily portfolio value  		  	   		 	 	  			  		 			 	 	 		 		 	
-    port_val = prices_SPY  # add code here to compute daily portfolio values  	
-
-    # getting the proper portfolio values
-    port_val = portfolio_value
-
-    # run the minimize function to actually "optimize"
+    # splits into the ticker symbols and SPY	  	   		 	 	 			  		 			 	 	 		 		 	
+    prices = prices_all[syms]  		  	   		 	 	 			  		 			 	 	 		 		 	
+    prices_SPY = prices_all["SPY"]  		  	   		 	 	 			  		 			 	 	 		 		 	
+  		  	   		 	 	 			  		 			 	 	 		 		 			  	   		 	 	 			  		 			 	 	 		 		 		   		 	 	 			  		 			 	 	 		 		 	
+    # get ready for the minimize function
     number_of_assets = len(syms)
     initial_guess = [1.0 / number_of_assets] * number_of_assets
     bounds = [(0.0, 1.0)] * number_of_assets
     constraints = ({'type': 'eq', 'fun': lambda x: np.sum(x) - 1})
 
     def negative_sharpe_ratio(allocs):
+
+        # normalize stock prices so they start at 1 on the first day
         normalized_prices = prices / prices.iloc[0]
+
+        # given our current percentage allocation, what are the prices we have?
         allocated_prices = normalized_prices * allocs
+
+        # what is the value of the portfolio then on each day?
         portfolio_value = allocated_prices.sum(axis=1)
+
+        # the percentage returns of the portfolio on a day to day basis.
         daily_returns = portfolio_value.pct_change().dropna()
+
+        # what is the average of that percentage return?
         average_daily_return = daily_returns.mean()
+
+        # what is the standard deviation of that percentage return?
         standard_deviation_of_daily_returns = daily_returns.std()
+
+        # math magic
         sharpe_ratio = (average_daily_return / standard_deviation_of_daily_returns) * np.sqrt(252)
         return -sharpe_ratio
     
     result = minimize(negative_sharpe_ratio, initial_guess, method='SLSQP', bounds=bounds, constraints=constraints)
-
     optimal_allocations = result.x
   		  	   		 	 	 			  		 			 	 	 		 		 	
-    # Compare daily portfolio value with SPY using a normalized plot  		  	   		 	 	 			  		 			 	 	 		 		 	
-    if gen_plot:  		  	   		 	 	 			  		 			 	 	 		 		 	
+    if gen_plot:  		  	   		 	 	 	
+
+        # the first item on the graph will be the date/normalized value of the optimally allocated portfolio
         normalized_prices = prices / prices.iloc[0]
         portfolio_value = (normalized_prices * optimal_allocations).sum(axis=1)
         normalized_portfolio_value = portfolio_value / portfolio_value.iloc[0]
+
+        # the second item will be SPY to see if we outperformed SPY
         normalized_spy = prices_SPY / prices_SPY.iloc[0]
 
+        # then we just throw those mfs up there
         df_plot = pd.concat([normalized_portfolio_value, normalized_spy], axis=1)
         df_plot.columns = ['Portfolio', 'SPY']
 
@@ -143,6 +131,7 @@ def optimize_portfolio(
         plt.savefig("Figure2.png")
         plt.close  	   
 
+    # and here we wrap up some status to judge the function
     portfolio_value = (prices / prices.iloc[0] * optimal_allocations).sum(axis=1)
     cumulative_return = (portfolio_value[-1] / portfolio_value[0]) - 1
     daily_returns = portfolio_value.pct_change().dropna()
